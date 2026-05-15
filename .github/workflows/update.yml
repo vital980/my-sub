@@ -10,26 +10,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Download subscriptions
         run: |
-          cat sources.txt > urls.txt
-
-      - name: Build merged subscription
-        run: |
           rm -f output.yaml
+
           while read line
           do
-            curl -L --max-time 20 "$line" >> output.yaml || true
+            echo "Downloading: $line"
+            curl -L --max-time 30 "$line" >> output.yaml || true
             echo "" >> output.yaml
-          done < urls.txt
+          done < sources.txt
+
+      - name: Show output size
+        run: |
+          ls -lh output.yaml
+          wc -l output.yaml
 
       - name: Commit files
         run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@example.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           git add output.yaml
-          git commit -m "update" || echo "no changes"
+
+          git diff --cached --quiet && exit 0
+
+          git commit -m "update subscription"
+
           git push
