@@ -5,7 +5,6 @@ on:
   schedule:
     - cron: "0 */3 * * *"
 
-# Переменная для принудительного использования Node.js 24 (решает проблему из логов)
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -13,35 +12,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    # Даем права на запись в репозиторий
     permissions:
       contents: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4 — самая стабильная на данный момент
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # Это важно для корректного pull/rebase
 
       - name: Download subscriptions
         run: |
-          # Создаем пустой файл или очищаем старый
-          cat /dev/null > output.yaml
-
-          # Проверяем существование sources.txt, чтобы билд не падал
           if [ ! -f sources.txt ]; then
-            echo "Error: sources.txt not found!"
+            echo "sources.txt not found"
             exit 1
           fi
-
+          > output.yaml
           while IFS= read -r line || [ -n "$line" ]
           do
-            # Пропускаем пустые строки
-            [ -z "$line" ] && continue
-            
-            echo "Downloading: $line"
-            curl -L --max-time 30 "$line" >> output.yaml || echo "Failed to download $line"
+            [[ -z "$line" || "$line" == #* ]] && continue
+            curl -L --max-time 30 "$line" >> output.yaml || true
             echo -e "\n" >> output.yaml
           done < sources.txt
 
@@ -51,14 +41,15 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           git add output.yaml
-
-          # Проверяем, есть ли изменения
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
+          
+          # Если изменений нет, выходим
+          git diff --staged --quiet && exit 0
 
           git commit -m "update sub: $(date +'%Y-%m-%d %H:%M')"
-          
-          # Пытаемся запушить. Если не сработает — выведет понятную ошибку
-          git push origin main || { echo "Push failed. Check account restrictions or permissions."; exit 1; }
+
+          # КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ:
+          # Забираем изменения из облака, если они там появились
+          git pull --rebase origin main
+
+          # Теперь пушим
+          git push origin main
