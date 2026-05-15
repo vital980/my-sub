@@ -5,41 +5,53 @@ on:
   schedule:
     - cron: "0 */3 * * *"
 
-permissions:
-  contents: write
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Обязательно 0, чтобы Git видел всю историю для pull
 
       - name: Download subscriptions
         run: |
-          rm -f output.yaml
-
-          while IFS= read -r line
+          if [ ! -f sources.txt ]; then
+            echo "sources.txt not found"
+            exit 1
+          fi
+          > output.yaml
+          while IFS= read -r line || [ -n "$line" ]
           do
-            echo "Downloading $line"
-            curl -L --max-time 30 "$line" >> output.yaml || true
-            echo "" >> output.yaml
+            [[ -z "$line" || "$line" == #* ]] && continue
+            curl -L -f --max-time 30 "$line" >> output.yaml || echo "Failed: $line"
+            echo -e "\n" >> output.yaml
           done < sources.txt
 
       - name: Commit and push
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git pull origin main
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           git add output.yaml
 
-          git diff --staged --quiet && exit 0
+          # Проверяем, изменилось ли что-то, чтобы не делать пустых коммитов
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
 
-          git commit -m "update sub"
+          git commit -m "update sub: $(date +'%Y-%m-%d %H:%M')"
 
-          git push origin HEAD:main
+          # РЕШЕНИЕ ВАШЕЙ ОШИБКИ: 
+          # Забираем изменения из GitHub и ставим наш коммит сверху
+          git pull --rebase origin main
+          
+          # Теперь пушим без конфликтов
+          git push origin main
