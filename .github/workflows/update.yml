@@ -9,34 +9,39 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download subconverter
-        run: |
-          git clone https://github.com/tindy2013/subconverter.git
-          cd subconverter
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate subscription
         run: |
-          mkdir -p output
-          
+          rm -f output.yaml
+
           URLS=$(paste -sd '|' sources.txt)
 
           curl -L "http://sub.id9.cc/sub?target=clash&url=$URLS" \
           -o output.yaml
 
-          ls -la
-          cat output.yaml || true
+          ls -lh output.yaml
+          cat output.yaml | head
 
-      - name: Commit files
+      - name: Commit and push
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           git add output.yaml
 
-          git diff --cached --quiet && echo "No changes" || git commit -m "update sub"
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+
+          git commit -m "update subscription"
 
           git push
