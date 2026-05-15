@@ -5,51 +5,46 @@ on:
   schedule:
     - cron: "0 */3 * * *"
 
-permissions:
-  contents: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Create output file
-        run: |
-          rm -f output.yaml
-          touch output.yaml
 
       - name: Download subscriptions
         run: |
+          rm -f output.yaml
+          
           while read line
           do
-            echo "Downloading $line"
-            curl -L --silent "$line" >> output.yaml || true
+            echo "Downloading: $line"
+            curl -L --max-time 30 "$line" >> output.yaml || true
             echo "" >> output.yaml
           done < sources.txt
 
-      - name: Show result
+      - name: Show output size
         run: |
-          ls -lh
-          echo "=========="
-          cat output.yaml || true
+          ls -lh output.yaml
+          wc -l output.yaml
 
-      - name: Commit and push
+      - name: Commit files
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
+          
+          git pull --rebase
+          
           git add output.yaml
-
-          git diff --cached --quiet && exit 0
-
-          git commit -m "auto update"
-
-          git pull --rebase origin main
-
+          
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git commit -m "update subscription"
+          
           git push
