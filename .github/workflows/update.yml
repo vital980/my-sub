@@ -5,44 +5,53 @@ on:
   schedule:
     - cron: "0 */3 * * *"
 
-permissions:
-  contents: write
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Download subscriptions
         run: |
           rm -f output.yaml
-          touch output.yaml
 
           while read line
           do
             echo "Downloading: $line"
-            curl -L --silent "$line" >> output.yaml || true
+            curl -L --max-time 30 "$line" >> output.yaml || true
             echo "" >> output.yaml
           done < sources.txt
+
+      - name: Show output
+        run: |
+          ls -lh
+          wc -l output.yaml || true
 
       - name: Commit files
         run: |
           git config --global user.name "bot"
-          git config --global user.email "bot@users.noreply.github.com"
+          git config --global user.email "bot@example.com"
 
           git add output.yaml
 
-          git diff --cached --quiet && exit 0
-
-          git stash
-          git pull origin main --rebase
-          git stash pop || true
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
 
           git commit -m "update"
 
-          git push
+          git pull --rebase origin main
+
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
