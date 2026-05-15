@@ -13,31 +13,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download subscriptions
+      - name: Download subconverter
         run: |
-          rm -f output.yaml
+          git clone https://github.com/tindy2013/subconverter.git
+          cd subconverter
 
-          while read line
-          do
-            echo "Downloading: $line"
-            curl -L --max-time 30 "$line" >> output.yaml || true
-            echo "" >> output.yaml
-          done < sources.txt
-
-      - name: Show output size
+      - name: Generate subscription
         run: |
-          ls -lh output.yaml
-          wc -l output.yaml
+          mkdir -p output
+          
+          URLS=$(paste -sd '|' sources.txt)
+
+          curl -L "http://sub.id9.cc/sub?target=clash&url=$URLS" \
+          -o output.yaml
+
+          ls -la
+          cat output.yaml || true
 
       - name: Commit files
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
 
           git add output.yaml
 
-          git diff --cached --quiet && exit 0
-
-          git commit -m "update subscription"
+          git diff --cached --quiet && echo "No changes" || git commit -m "update sub"
 
           git push
