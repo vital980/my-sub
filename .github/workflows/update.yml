@@ -1,66 +1,45 @@
 name: update-sub
 
 on:
-  workflow_dispatch: # Ручной запуск
+  workflow_dispatch:
   schedule:
-    - cron: "0 */3 * * *" # Запуск каждые 3 часа
+    - cron: "0 */3 * * *"
 
-env:
-  # Убираем то самое предупреждение про Node.js 20
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    # Даем права боту на запись в твой репозиторий
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          fetch-depth: 0 # Качаем всю историю, чтобы pull/push работали без ошибок
+          fetch-depth: 0
 
       - name: Download subscriptions
         run: |
-          # Проверка наличия файла со ссылками
-          if [ ! -f sources.txt ]; then
-            echo "Error: sources.txt not found!"
-            exit 1
-          fi
+          rm -f output.yaml
 
-          # Очищаем старый файл
-          > output.yaml
-
-          # Качаем данные
-          while IFS= read -r line || [ -n "$line" ]
+          while IFS= read -r line
           do
-            [[ -z "$line" || "$line" == #* ]] && continue
-            echo "Downloading: $line"
-            curl -L -f --max-time 30 "$line" >> output.yaml || echo "Skip: $line"
-            echo -e "\n" >> output.yaml
+            echo "Downloading $line"
+            curl -L --max-time 30 "$line" >> output.yaml || true
+            echo "" >> output.yaml
           done < sources.txt
 
       - name: Commit and push
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git pull origin main
 
           git add output.yaml
 
-          # Если файл не изменился, просто выходим без ошибки
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
+          git diff --staged --quiet && exit 0
 
-          git commit -m "update sub: $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "update sub"
 
-          # Сначала забираем возможные изменения из облака, чтобы не было 'rejected'
-          # Если твоя ветка называется master, замени main на master ниже
-          git pull --rebase origin main
-          
-          # Пушим результат
-          git push origin main
+          git push origin HEAD:main
