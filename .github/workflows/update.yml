@@ -5,43 +5,46 @@ on:
   schedule:
     - cron: "0 */3 * * *"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate subscription
+      - name: Create output file
         run: |
           rm -f output.yaml
+          touch output.yaml
 
-          URLS=$(paste -sd '|' sources.txt)
+      - name: Download subscriptions
+        run: |
+          while read line
+          do
+            echo "Downloading $line"
+            curl -L --silent "$line" >> output.yaml || true
+            echo "" >> output.yaml
+          done < sources.txt
 
-          curl -L "http://sub.id9.cc/sub?target=clash&url=$URLS" \
-          -o output.yaml
-
-          ls -lh output.yaml
-          cat output.yaml | head
+      - name: Show result
+        run: |
+          ls -lh
+          echo "=========="
+          cat output.yaml || true
 
       - name: Commit and push
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add output.yaml
 
-          if git diff --cached --quiet; then
-            echo "No changes"
-            exit 0
-          fi
+          git diff --cached --quiet && exit 0
 
-          git commit -m "update subscription"
+          git commit -m "auto update"
 
           git push
